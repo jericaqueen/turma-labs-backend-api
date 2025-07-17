@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -16,9 +16,19 @@ def api_root():
 def health_check():
     return {"status": "healthy", "service": "Turma Labs Backend API"}
 
-# Vercel serverless function handler
-def handler(event, context):
-    return app
+@app.route('/api/employees')
+def get_employees():
+    # Sample employee data
+    employees = [
+        {"id": 1, "name": "John Doe", "position": "Developer", "department": "IT"},
+        {"id": 2, "name": "Jane Smith", "position": "Designer", "department": "Design"},
+        {"id": 3, "name": "Mike Johnson", "position": "Manager", "department": "Operations"}
+    ]
+    return {"employees": employees, "count": len(employees)}
+
+# This is the entry point for Vercel
+def handler(request, response):
+    return app(request, response)
 
 # For local development
 if __name__ == '__main__':
