@@ -94,7 +94,7 @@ time_adjustment_requests_db = []
 training_materials_db = []
 
 # Active sessions for real-time sync - Fixed: Enhanced tracking
-    payload = {
+payload = {
         'user_id': user_id,
         'exp': datetime.utcnow() + timedelta(days=7)
     }
@@ -740,6 +740,8 @@ def get_realtime_status():
 
 # CSV Export endpoints remain the same...
 
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
 
 
 
@@ -776,5 +778,3 @@ def create_training_material():
     
     training_materials_db.append(new_material)
     return jsonify({"success": True, "material": new_material})
-
-
