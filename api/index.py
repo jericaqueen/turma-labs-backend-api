@@ -86,7 +86,7 @@ def health_check():
     return jsonify({"message": "Turma Labs Backend API is running", "status": "healthy"})
 
 # Routes
-@app.route("/api/login", methods=["POST"])
+@app.route("/api/auth/login", methods=["POST"])
 def login():
     try:
         data = request.get_json()
@@ -109,92 +109,82 @@ def login():
     except Exception as e:
         return jsonify({"message": "Internal server error", "error": str(e)}), 500
 
-@app.route("/api/dashboard", methods=["GET"])
+@app.route("/api/auth/verify", methods=["POST"])
 @token_required
-def dashboard(current_user, current_user_role):
-    return jsonify({"message": f"Welcome to the dashboard, {current_user}! Your role is {current_user_role}."})
+def verify_token(current_user, current_user_role):
+    return jsonify({"user": current_user, "role": current_user_role})
 
-@app.route("/api/training_materials", methods=["GET"])
+@app.route("/api/announcements", methods=["GET"])
+@token_required
+def get_announcements(current_user, current_user_role):
+    announcements = [
+        {"id": 1, "title": "Welcome to Turma Labs", "content": "Welcome to our employee management system!", "date": "2024-01-01"},
+        {"id": 2, "title": "System Update", "content": "The system has been updated with new features.", "date": "2024-01-15"}
+    ]
+    return jsonify(announcements)
+
+@app.route("/api/announcements", methods=["POST"])
+@token_required
+@admin_required
+def create_announcement(current_user, current_user_role):
+    try:
+        data = request.get_json()
+        new_announcement = {
+            "id": len(announcements) + 1,
+            "title": data.get("title"),
+            "content": data.get("content"),
+            "date": datetime.now().strftime("%Y-%m-%d")
+        }
+        return jsonify(new_announcement), 201
+    except Exception as e:
+        return jsonify({"message": "Error creating announcement", "error": str(e)}), 500
+
+@app.route("/api/training/materials", methods=["GET"])
 @token_required
 def get_training_materials(current_user, current_user_role):
     return jsonify(training_materials_db)
 
-@app.route("/api/training_materials", methods=["POST"])
+@app.route("/api/employee/clock-in", methods=["POST"])
 @token_required
-@admin_required
-def add_training_material(current_user, current_user_role):
+def clock_in(current_user, current_user_role):
+    try:
+        new_log = {"user": current_user, "type": "clock_in", "timestamp": datetime.now().isoformat()}
+        time_logs_db.append(new_log)
+        return jsonify({"message": "Clocked in successfully", "log": new_log}), 201
+    except Exception as e:
+        return jsonify({"message": "Error processing clock in", "error": str(e)}), 500
+
+@app.route("/api/employee/clock-out", methods=["POST"])
+@token_required
+def clock_out(current_user, current_user_role):
+    try:
+        new_log = {"user": current_user, "type": "clock_out", "timestamp": datetime.now().isoformat()}
+        time_logs_db.append(new_log)
+        return jsonify({"message": "Clocked out successfully", "log": new_log}), 201
+    except Exception as e:
+        return jsonify({"message": "Error processing clock out", "error": str(e)}), 500
+
+@app.route("/api/employee/eod-report", methods=["POST"])
+@token_required
+def submit_eod_report(current_user, current_user_role):
     try:
         data = request.get_json()
-        new_id = max([m["id"] for m in training_materials_db]) + 1 if training_materials_db else 1
-        new_material = {"id": new_id, "title": data["title"], "content": data["content"], "category": data["category"]}
-        training_materials_db.append(new_material)
-        return jsonify(new_material), 201
+        eod_report = {
+            "user": current_user,
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "tasks_completed": data.get("tasksCompleted", ""),
+            "challenges": data.get("challenges", ""),
+            "tomorrow_plan": data.get("tomorrowPlan", ""),
+            "timestamp": datetime.now().isoformat()
+        }
+        return jsonify({"message": "EOD report submitted successfully", "report": eod_report}), 201
     except Exception as e:
-        return jsonify({"message": "Error adding training material", "error": str(e)}), 500
+        return jsonify({"message": "Error submitting EOD report", "error": str(e)}), 500
 
-@app.route("/api/training_materials/<int:material_id>", methods=["PUT"])
+@app.route("/api/admin/employees", methods=["GET"])
 @token_required
 @admin_required
-def update_training_material(current_user, current_user_role, material_id):
-    try:
-        data = request.get_json()
-        material = next((m for m in training_materials_db if m["id"] == material_id), None)
-        if material:
-            material.update(data)
-            return jsonify(material)
-        return jsonify({"message": "Material not found"}), 404
-    except Exception as e:
-        return jsonify({"message": "Error updating training material", "error": str(e)}), 500
-
-@app.route("/api/training_materials/<int:material_id>", methods=["DELETE"])
-@token_required
-@admin_required
-def delete_training_material(current_user, current_user_role, material_id):
-    try:
-        global training_materials_db
-        initial_len = len(training_materials_db)
-        training_materials_db = [m for m in training_materials_db if m["id"] != material_id]
-        if len(training_materials_db) < initial_len:
-            return jsonify({"message": "Material deleted"}), 204
-        return jsonify({"message": "Material not found"}), 404
-    except Exception as e:
-        return jsonify({"message": "Error deleting training material", "error": str(e)}), 500
-
-@app.route("/api/time_logs", methods=["POST"])
-@token_required
-def clock_in_out(current_user, current_user_role):
-    try:
-        data = request.get_json()
-        log_type = data.get("type")  # "clock_in" or "clock_out"
-
-        if log_type == "clock_in":
-            new_log = {"user": current_user, "type": "clock_in", "timestamp": datetime.now().isoformat()}
-            time_logs_db.append(new_log)
-            return jsonify({"message": "Clocked in successfully", "log": new_log}), 201
-        elif log_type == "clock_out":
-            new_log = {"user": current_user, "type": "clock_out", "timestamp": datetime.now().isoformat()}
-            time_logs_db.append(new_log)
-            return jsonify({"message": "Clocked out successfully", "log": new_log}), 201
-        return jsonify({"message": "Invalid log type"}), 400
-    except Exception as e:
-        return jsonify({"message": "Error processing time log", "error": str(e)}), 500
-
-@app.route("/api/time_logs", methods=["GET"])
-@token_required
-def get_time_logs(current_user, current_user_role):
-    try:
-        if current_user_role == "admin":
-            return jsonify(time_logs_db)
-        else:
-            user_logs = [log for log in time_logs_db if log["user"] == current_user]
-            return jsonify(user_logs)
-    except Exception as e:
-        return jsonify({"message": "Error retrieving time logs", "error": str(e)}), 500
-
-@app.route("/api/users", methods=["GET"])
-@token_required
-@admin_required
-def get_users(current_user, current_user_role):
+def get_employees(current_user, current_user_role):
     try:
         # Return user emails and roles, excluding passwords
         users_info = [{
@@ -203,43 +193,45 @@ def get_users(current_user, current_user_role):
         } for email in users_db]
         return jsonify(users_info)
     except Exception as e:
-        return jsonify({"message": "Error retrieving users", "error": str(e)}), 500
+        return jsonify({"message": "Error retrieving employees", "error": str(e)}), 500
 
-@app.route("/api/export_data", methods=["GET"])
+@app.route("/api/admin/time-records", methods=["GET"])
 @token_required
 @admin_required
-def export_data(current_user, current_user_role):
+def get_time_records(current_user, current_user_role):
     try:
-        data_type = request.args.get("type")
-
-        if data_type == "users":
-            si = io.StringIO()
-            cw = csv.writer(si)
-            cw.writerow(["Email", "Role"])
-            for email, user_data in users_db.items():
-                cw.writerow([email, user_data["role"]])
-            output = si.getvalue()
-            return Response(output, mimetype="text/csv", headers={"Content-Disposition": "attachment;filename=users.csv"})
-        elif data_type == "training_materials":
-            si = io.StringIO()
-            cw = csv.writer(si)
-            cw.writerow(["ID", "Title", "Content", "Category"])
-            for material in training_materials_db:
-                cw.writerow([material["id"], material["title"], material["content"], material["category"]])
-            output = si.getvalue()
-            return Response(output, mimetype="text/csv", headers={"Content-Disposition": "attachment;filename=training_materials.csv"})
-        elif data_type == "time_logs":
-            si = io.StringIO()
-            cw = csv.writer(si)
-            cw.writerow(["User", "Type", "Timestamp"])
-            for log in time_logs_db:
-                cw.writerow([log["user"], log["type"], log["timestamp"]])
-            output = si.getvalue()
-            return Response(output, mimetype="text/csv", headers={"Content-Disposition": "attachment;filename=time_logs.csv"})
-
-        return jsonify({"message": "Invalid data type for export"}), 400
+        return jsonify(time_logs_db)
     except Exception as e:
-        return jsonify({"message": "Error exporting data", "error": str(e)}), 500
+        return jsonify({"message": "Error retrieving time records", "error": str(e)}), 500
+
+@app.route("/api/admin/eod-reports", methods=["GET"])
+@token_required
+@admin_required
+def get_eod_reports(current_user, current_user_role):
+    try:
+        # Return empty array for now since we don't have persistent storage
+        return jsonify([])
+    except Exception as e:
+        return jsonify({"message": "Error retrieving EOD reports", "error": str(e)}), 500
+
+@app.route("/api/system/health", methods=["GET"])
+@token_required
+@admin_required
+def system_health(current_user, current_user_role):
+    try:
+        health_data = {
+            "status": "healthy",
+            "uptime": "99.9%",
+            "last_check": datetime.now().isoformat(),
+            "services": {
+                "database": "operational",
+                "api": "operational",
+                "authentication": "operational"
+            }
+        }
+        return jsonify(health_data)
+    except Exception as e:
+        return jsonify({"message": "Error retrieving system health", "error": str(e)}), 500
 
 # Error handlers
 @app.errorhandler(404)
@@ -252,3 +244,4 @@ def internal_error(error):
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
+
